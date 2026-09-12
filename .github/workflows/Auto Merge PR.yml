@@ -16,7 +16,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check auto-merge availability
+        id: auto-merge-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const query = `
+              query($owner: String!, $repo: String!) {
+                repository(owner: $owner, name: $repo) {
+                  autoMergeAllowed
+                }
+              }
+            `;
+
+            const { repository } = await github.graphql(query, {
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+
+            if (!repository.autoMergeAllowed) {
+              core.notice('Repository auto-merge is disabled; skipping auto-merge enablement.');
+            }
+
+            core.setOutput('enabled', repository.autoMergeAllowed ? 'true' : 'false');
+
       - name: Enable Auto-Merge
+        if: steps.auto-merge-check.outputs.enabled == 'true'
         uses: peter-evans/enable-pull-request-automerge@v2
         with:
           token: ${{ secrets.PAT }}
