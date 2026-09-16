@@ -3,7 +3,7 @@ on:
 #  pull_request:
 #    branches:
 #      - '**'
-  pull_request:
+  pull_request_target:
     branches:
       - '**'
 
