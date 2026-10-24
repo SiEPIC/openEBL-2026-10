@@ -1,5 +1,15 @@
 name: Auto Merge PR
 
+# Auto-merge rule:
+#   - each GitHub user gets up to MAX_DESIGNS design files (.gds/.oas in
+#     submissions/) auto-merged; set below in the Decide step
+#   - replacing or deleting their own files always auto-merges (unlimited resubmissions)
+#   - anything else (designs beyond the limit, touching someone
+#     else's file) is labelled 'manual-review' and waits for an instructor
+#   - PRs from branches inside this repo (the aggregation PR) always auto-merge
+#
+# pull_request_target is safe here: this workflow never checks out or runs
+# PR code. It only reads PR metadata through the GitHub API.
 on:
   pull_request_target:
     types:
@@ -10,15 +20,123 @@ on:
 permissions:
   pull-requests: write
   contents: write
+  issues: write
 
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Decide auto-merge or manual review
+        id: decide
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MAX_DESIGNS = 2;   // design files per person that auto-merge
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+            const author = pr.user.login.toLowerCase();
+            const isDesign = f => /^submissions\/.+\.(gds|oas)$/i.test(f);
+
+            // In-repo branches (e.g. the aggregation PR) can't come from a fork
+            if (pr.head.repo && pr.head.repo.full_name === `${owner}/${repo}`) {
+              core.setOutput('decision', 'auto');
+              core.setOutput('reason', 'PR from a branch in this repository');
+              return;
+            }
+
+            // Who last committed a file on main (author, or committer as fallback)
+            async function ownerOf(path) {
+              const { data } = await github.rest.repos.listCommits({
+                owner, repo, sha: pr.base.ref, path, per_page: 1 });
+              if (!data.length) return null;
+              const c = data[0];
+              return ((c.author && c.author.login) || (c.committer && c.committer.login) || '').toLowerCase();
+            }
+
+            // 1. Files in this PR
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { owner, repo, pull_number: pr.number, per_page: 100 });
+            const newDesigns = files.filter(f => f.status === 'added' && isDesign(f.filename))
+                                    .map(f => f.filename);
+
+            // 2. Every replaced, renamed or deleted file must be the author's own
+            for (const f of files.filter(f => f.status !== 'added')) {
+              const path = f.status === 'renamed' ? f.previous_filename : f.filename;
+              const who = await ownerOf(path);
+              if (who && who !== author) {
+                core.setOutput('decision', 'manual');
+                core.setOutput('reason', `changes ${path}, which was submitted by ${who}`);
+                return;
+              }
+            }
+
+            // 3. Designs this author already has on main (only matters if this PR adds one)
+            if (newDesigns.length === 0) {
+              core.setOutput('decision', 'auto');
+              core.setOutput('reason', 'no new design files');
+              return;
+            }
+            const { data: tree } = await github.rest.git.getTree(
+              { owner, repo, tree_sha: pr.base.ref, recursive: 'true' });
+            const onMain = new Set(tree.tree.map(t => t.path));
+            const merged = await github.paginate(github.rest.search.issuesAndPullRequests,
+              { q: `repo:${owner}/${repo} is:pr is:merged author:${pr.user.login}`, per_page: 100 });
+            const existing = new Set();
+            for (const m of merged) {
+              const mFiles = await github.paginate(github.rest.pulls.listFiles,
+                { owner, repo, pull_number: m.number, per_page: 100 });
+              mFiles.filter(f => f.status === 'added' && isDesign(f.filename) && onMain.has(f.filename))
+                    .forEach(f => existing.add(f.filename));
+            }
+
+            const total = existing.size + newDesigns.length;
+            core.info(`Existing designs: ${[...existing].join(', ') || 'none'}`);
+            core.info(`New designs in this PR: ${newDesigns.join(', ') || 'none'}`);
+            if (newDesigns.length === 0) {
+              // Only updates to the author's own files, or non-design files (e.g. reports)
+              core.setOutput('decision', 'auto');
+              core.setOutput('reason', 'no new design files');
+            } else if (total <= MAX_DESIGNS) {
+              core.setOutput('decision', 'auto');
+              core.setOutput('reason', `design ${total} of ${MAX_DESIGNS}`);
+            } else {
+              core.setOutput('decision', 'manual');
+              core.setOutput('reason',
+                `would give ${pr.user.login} ${total} designs (up to ${MAX_DESIGNS} are merged automatically)`);
+              core.setOutput('max', String(MAX_DESIGNS));
+            }
+
       - name: Enable Auto-Merge
+        if: steps.decide.outputs.decision == 'auto'
         uses: peter-evans/enable-pull-request-automerge@v2
         with:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: merge
+
+      - name: Flag for manual review
+        if: steps.decide.outputs.decision == 'manual'
+        uses: actions/github-script@v7
+        env:
+          REASON: ${{ steps.decide.outputs.reason }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            // If a later push made this PR need review, cancel any auto-merge set earlier
+            try {
+              await github.graphql(
+                `mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }`,
+                { id: pr.node_id });
+            } catch (e) { /* auto-merge was not enabled */ }
+
+            await github.rest.issues.addLabels({
+              ...context.repo, issue_number: pr.number, labels: ['manual-review'] });
+
+            if (context.payload.action === 'opened') {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: pr.number,
+                body: 'Thanks for your submission! Each person\'s first designs are merged automatically, ' +
+                      'and updates to them always are. This pull request ' + process.env.REASON +
+                      ', so an instructor will review and merge it manually.' });
+            }
