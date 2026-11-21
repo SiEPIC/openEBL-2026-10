@@ -71,31 +71,53 @@ The submission involves several steps. First, you need to create your design(s) 
   - Please run your verification locally (press V in KLayout), or download the output .lydrb verification file from GitHub and open in KLayout.
 - Look for errors -- "All checks have failed" ![image](https://github.com/SiEPIC/openEBL-2024-05/assets/15843200/d5689514-eca0-423f-9288-b20ec4fdd5e9)
   - Click on Details
-  - In the main, window expand the "Run layout verification"; see if there is a text description of the problem
+  - In the main window, expand the "Run layout verification"; see if there is a text description of the problem
   - Look for the Artifact file; download it and open it in KLayout
 - After fixing the errors, you should have a green check mark as follows: ![image](https://github.com/SiEPIC/openEBL-2024-05/assets/15843200/4c502cc4-16c1-4115-8ad7-7d5fdfe715d3)   
-- Alternatively upload your Python file, which will be compiled by a GitHub Action.  
+- Alternatively, upload your Python file, which will be compiled by a GitHub Action.  
   - For KLayout designs, use the "submissions/KLayout Python" folder, namely a .py (Python format) file.  e.g., EBeam_LukasChrostowski_MZI.py.  The Python file should save a gds or oas file into the parent "submissions" folder. The Python script needs to be executable in non-GUI mode, namely using "import klayout SiEPIC SiEPIC-EBeam-PDK"
 - Create a [Pull Request](https://help.github.com/articles/using-pull-requests/) -- this will notify the team of your contribution, which we can aggregate into the main design file
-- Return to the main repository, and ensure that your design is correctly merged. Download the Latest Merge file, below.
+- Return to the main repository and ensure that your design is correctly merged. Download the latest merged file below.
 
 ![image](https://github.com/SiEPIC/openEBL-2024-02/assets/15843200/e4785a27-b971-4a64-8796-1e351f30c00e)
 
 ## Black-box cells (IP Replacement)
 
 - We perform IP replacement on several cells (grating couplers). We call these cells Black Box (BB), and you can identify them by _BB in the cell name, or the presence of the Blackbox layer 998/0 in the cell.
-- You must not change the name of the cell, the contents, nor cell origins. Otherwise, the replacement will not work correctly.
+- You must not change the name of the cell, the contents, or the cell origins. Otherwise, the replacement will not work correctly.
 
 
 
 ## FYI – Automated GitHub Actions
 
-The verification and merging is performed using GitHub actions. The repository implements the following:
+GitHub Actions performs verification and merging. The repository implements the following:
 
-1. Running the Python files in the "submissions/KLayout Python" folder, to generate the designs
-2. Performing Manufacturing DRC verification on the designs in the "submissions" folder, and outputing the errors as an Artifact
-3. Performing Functional verification on the designs in the "submissions" folder, and outputing the errors as an Artifact
-4. Merging the designs from the "submissions" folder, and outputing merged layout as an Artifact in the main repository
+1. Running the Python files in the "submissions/KLayout Python" folder to generate the designs
+2. Performing Manufacturing DRC verification on the designs in the "submissions" folder, and outputting the errors as an Artifact
+3. Performing Functional verification on the designs in the "submissions" folder, and outputting the errors as an Artifact
+4. Merging the designs from the "submissions" folder, and outputting the merged layout as an Artifact in the main repository
+
+
+## Measurement data
+[Data Set](https://stratus.ece.ubc.ca/s/J7XodQHJySmo4kc)
+
+## SEM images of the fabricated designs
+
+Scanning electron microscope images of some of the devices from this fabrication run were taken and are available in the "SEMs" folder and shown here:
+
+
+![SEM image – 1x2 splitter](./SEMs/LR_037.jpg)
+
+![SEM image – subwavelength grating waveguides](./SEMs/LR_038.jpg)
+
+![SEM image – Bragg grating](./SEMs/LR_056.jpg)
+
+![SEM image – Bragg grating contra directional coupler](./SEMs/LR_053.jpg)
+
+
+![SEM image – lithgraphy test structure](./SEMs/LR_052.jpg)
+
+![SEM image – lithgraphy test structure](./SEMs/LR_049.jpg)
 
 ## Merged Layout File
 
